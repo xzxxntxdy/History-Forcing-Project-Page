@@ -14,4 +14,11 @@
 
 .world-comparison video{aspect-ratio:1280/704;object-fit:contain}
 
+.comparison-viewport{position:relative}
+.comparison-viewport:fullscreen{display:grid;place-items:center;background:#152018}
+.comparison-viewport:fullscreen video{width:100%;height:100%;object-fit:contain}
+.comparison-cover{position:absolute;inset:0;z-index:1;width:100%;height:100%;object-fit:contain;background:#152018;pointer-events:none;visibility:hidden}
+.paired-videos[data-startup-pending="true"] .comparison-cover{visibility:visible}
+.paired-video .fullscreen-button{z-index:2}
+
 .paper-pending{cursor:default}.button.paper-pending{background:#576c60;border-color:#576c60}.button.paper-pending:hover{transform:none;background:#576c60}.paper-pending small{font-size:9px;font-weight:400}@media(max-width:700px){.hero-actions .paper-pending{flex-direction:column;gap:0;padding:6px 10px}.hero-actions .paper-pending svg{display:none}.header-paper.paper-pending{font-size:10px}}

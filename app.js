@@ -64,6 +64,23 @@
     const ours = $(`#${oursId}`);
     const videos = [baseline,ours];
     const element = ours.closest('.paired-videos') || ours;
+    const covers = videos.map((video) => {
+      let viewport = video.closest('.comparison-viewport');
+      if(!viewport) {
+        viewport = document.createElement('div');
+        viewport.className = 'comparison-viewport';
+        video.before(viewport);
+        viewport.append(video);
+      }
+      const cover = document.createElement('img');
+      cover.className = 'comparison-cover';
+      cover.alt = '';
+      cover.setAttribute('aria-hidden','true');
+      cover.draggable = false;
+      viewport.append(cover);
+      return cover;
+    });
+    const fullscreenButtons = [...element.querySelectorAll('[data-fullscreen]')];
     const playButton = $(`#${prefix}-play`);
     const seek = $(`#${prefix}-seek`);
     const speed = $(`#${prefix}-speed`);
@@ -77,7 +94,9 @@
     let expectedSources = [];
     let wantedPlay = false;
     let waitingFor = null;
-    const started = new Set();
+    let startupPending = true;
+    let gateStage = 'idle';
+    let gateTarget = 0;
     let phase = 'idle';
     let requestId = 0;
     let operation;
@@ -93,6 +112,25 @@
     function sourceURLs() {
       return [selected.baselineWeb || selected.baseline,selected.oursWeb || selected.ours];
     }
+    function coverAt(position) {
+      startupPending = true;
+      gateTarget = Math.max(0,Math.min(position,duration));
+      element.dataset.startupPending = 'true';
+      element.dataset.startupTarget = String(gateTarget);
+      videos.forEach((video) => { if(video.webkitDisplayingFullscreen) video.webkitExitFullscreen?.(); });
+      fullscreenButtons.forEach((button) => { button.disabled = true; button.setAttribute('aria-disabled','true'); });
+      updateTime();
+    }
+    function reveal(request) {
+      if(!active(request) || !startupPending) return;
+      startupPending = false;
+      gateStage = 'idle';
+      pendingPosition = null;
+      element.dataset.startupPending = 'false';
+      fullscreenButtons.forEach((button) => { button.disabled = false; button.setAttribute('aria-disabled','false'); });
+      lastResync = performance.now();
+      updateTime();
+    }
     function setState(next) {
       phase = next;
       element.dataset.playbackState = next;
@@ -106,6 +144,7 @@
     }
     function updateTime(position = pendingPosition ?? ours.currentTime ?? 0) {
       if(scrubbing) return;
+      if(startupPending) position = gateTarget;
       seek.value = Math.min(position,duration);
       clock.textContent = `${time(position)} / ${time(Math.ceil(duration))}`;
     }
@@ -117,7 +156,7 @@
       operation?.abort();
       operation = undefined;
       waitingFor = null;
-      started.clear();
+      gateStage = 'idle';
       window.clearInterval(syncTimer);
       syncTimer = undefined;
       stopPlayers();
@@ -128,12 +167,13 @@
     }
     function pause({release = false} = {}) {
       const downloading = release && prepared && videos.some((video) => video.networkState === 2);
-      const position = pendingPosition ?? ours.currentTime ?? 0;
+      const position = startupPending ? gateTarget : pendingPosition ?? ours.currentTime ?? 0;
       wantedPlay = false;
       scrubbing = false;
       scrubResume = false;
       cancelOperation();
-      if(downloading) { pendingPosition = position; unload(); }
+      if(startupPending) pendingPosition = position;
+      if(downloading) { pendingPosition = position; unload(); coverAt(position); }
       setState('idle');
       updateTime();
     }
@@ -178,6 +218,92 @@
         check();
       });
     }
+    function frameReady(video,request,signal,target = null,knownFrame = null) {
+      return new Promise((resolve,reject) => {
+        if(signal.aborted || !active(request)) { reject(new DOMException('Cancelled','AbortError')); return; }
+        let settled = false;
+        let frameId;
+        let paintId;
+        let secondPaintId;
+        let captured = knownFrame;
+        const hasFrameCallback = typeof video.requestVideoFrameCallback === 'function';
+        const abort = () => finish(new DOMException('Cancelled','AbortError'));
+        const events = ['loadeddata','seeked','canplay','error'];
+        const timer = window.setTimeout(() => finish(new Error('frame-timeout')),45000);
+        const poll = window.setInterval(check,75);
+        function cleanup() {
+          window.clearTimeout(timer);
+          window.clearInterval(poll);
+          if(frameId !== undefined) video.cancelVideoFrameCallback?.(frameId);
+          if(paintId !== undefined) cancelAnimationFrame(paintId);
+          if(secondPaintId !== undefined) cancelAnimationFrame(secondPaintId);
+          signal.removeEventListener('abort',abort);
+          events.forEach((event) => video.removeEventListener(event,check));
+        }
+        function finish(problem) {
+          if(settled) return;
+          settled = true;
+          cleanup();
+          if(problem) reject(problem); else resolve(captured);
+        }
+        function ready() {
+          const lastFrame = target !== null && video.ended && video.duration - target <= 0.1;
+          return matchesSource(video) && !video.seeking && video.readyState >= 2 &&
+            (target === null || Math.abs(video.currentTime - target) <= 0.04 || lastFrame);
+        }
+        function check() {
+          if(settled) return;
+          if(signal.aborted || !active(request)) { abort(); return; }
+          if(video.error) { finish(new Error('media')); return; }
+          if(captured && captured.source === video.currentSrc && ready() &&
+             (target === null || Math.abs(captured.mediaTime - target) <= 0.15)) {
+            finish();
+          } else if(!hasFrameCallback && ready() && paintId === undefined) {
+            // Fallback for browsers without rVFC: seek/decoded readiness plus
+            // two paint opportunities, never just a currentTime assignment.
+            paintId = requestAnimationFrame(() => {
+              secondPaintId = requestAnimationFrame(() => {
+                paintId = undefined;
+                secondPaintId = undefined;
+                if(!settled && ready()) {
+                  captured = {mediaTime:video.currentTime,source:video.currentSrc};
+                  check();
+                }
+              });
+            });
+          }
+        }
+        function onFrame(_,metadata) {
+          frameId = undefined;
+          if(settled) return;
+          captured = {mediaTime:metadata.mediaTime,source:video.currentSrc};
+          check();
+          if(!settled) frameId = video.requestVideoFrameCallback(onFrame);
+        }
+        signal.addEventListener('abort',abort,{once:true});
+        events.forEach((event) => video.addEventListener(event,check));
+        check();
+        if(!settled && hasFrameCallback) frameId = video.requestVideoFrameCallback(onFrame);
+      });
+    }
+    function nextPaint(request,signal) {
+      return new Promise((resolve,reject) => {
+        if(signal.aborted || !active(request)) { reject(new DOMException('Cancelled','AbortError')); return; }
+        let second;
+        const abort = () => {
+          cancelAnimationFrame(first);
+          if(second !== undefined) cancelAnimationFrame(second);
+          reject(new DOMException('Cancelled','AbortError'));
+        };
+        const first = requestAnimationFrame(() => {
+          second = requestAnimationFrame(() => {
+            signal.removeEventListener('abort',abort);
+            if(active(request) && !signal.aborted) resolve(); else reject(new DOMException('Cancelled','AbortError'));
+          });
+        });
+        signal.addEventListener('abort',abort,{once:true});
+      });
+    }
     function fail(request) {
       if(!active(request)) return;
       pause({release:true});
@@ -185,7 +311,8 @@
       error.hidden = false;
     }
     function requestPlay(video,request) {
-      if(!active(request) || !wantedPlay || document.hidden || (waitingFor && waitingFor !== video)) return;
+      const gatePlaying = startupPending && ['priming','starting'].includes(gateStage);
+      if(!active(request) || (!wantedPlay && !gatePlaying) || document.hidden || (!startupPending && waitingFor && waitingFor !== video)) return;
       video.play().catch((problem) => {
         // Holding the other stream during buffering intentionally aborts its
         // pending play promise. It resumes from the playing event below.
@@ -196,6 +323,9 @@
       document.dispatchEvent(new CustomEvent('hf:playback-request',{detail:{owner:element}}));
     }
     async function begin(position,autoplay,announce = false) {
+      let target = typeof position === 'number' ? position
+        : pendingPosition ?? (startupPending ? gateTarget : ours.currentTime || 0);
+      if(typeof position !== 'number' && (videos.some((video) => video.ended) || target >= duration - 0.08)) target = 0;
       cancelOperation();
       const request = requestId;
       operation = new AbortController();
@@ -203,48 +333,87 @@
       wantedPlay = autoplay;
       scrubbing = false;
       scrubResume = false;
-      if(typeof position === 'number') pendingPosition = Math.max(0,Math.min(position,duration));
+      coverAt(target);
+      pendingPosition = gateTarget;
+      gateStage = 'priming';
       error.hidden = true;
       setState(autoplay ? 'loading' : 'seeking');
       if(announce) announcePlayback();
       try {
         if(document.hidden) { pause({release:true}); return; }
         prepare(true);
-        let destination = pendingPosition;
-        if(destination === null && (videos.some((video) => video.ended) || ours.currentTime >= duration - 0.08)) destination = 0;
-        function applyPosition(video) {
-          if(!active(request) || destination === null) return;
+        function applyInitialPosition(video) {
+          if(!active(request)) return;
           const end = Number.isFinite(video.duration) ? Math.min(duration,video.duration) : duration;
-          const target = Math.max(0,Math.min(destination,end - 0.02));
-          if(Math.abs(video.currentTime - target) > 0.025) video.currentTime = target;
+          const destination = Math.max(0,Math.min(gateTarget,end - 0.02));
+          if(Math.abs(video.currentTime - destination) > 0.025) video.currentTime = destination;
         }
         videos.forEach((video) => {
-          if(video.readyState >= 1) applyPosition(video);
-          else if(destination !== null) video.addEventListener('loadedmetadata',() => applyPosition(video),{once:true,signal});
+          if(video.readyState >= 1) applyInitialPosition(video);
+          else video.addEventListener('loadedmetadata',() => applyInitialPosition(video),{once:true,signal});
         });
-        if(autoplay) {
-          // Play intent starts before metadata: the first media response can
-          // continue into playback instead of being paused after its header.
-          videos.forEach((video) => { video.playbackRate = rate(); requestPlay(video,request); });
-          syncTimer = window.setInterval(synchronize,250);
-        }
-        await waitFor(() => videos.every((video) => video.readyState >= 1),signal);
+        // Keep both downloads active behind opaque covers, including when one
+        // stream responds much earlier or finishes before the other starts.
+        const firstFrames = Promise.all(videos.map((video) => frameReady(video,request,signal)));
+        videos.forEach((video) => { video.playbackRate = rate(); requestPlay(video,request); });
+        let submitted = await firstFrames;
         if(!active(request)) return;
         duration = Math.min(selected.duration,...videos.map((video) => Number.isFinite(video.duration) ? video.duration : selected.duration));
         seek.max = duration;
-        pendingPosition = null;
-        if(!autoplay) {
-          await waitFor(() => videos.every((video) => !video.seeking && video.readyState >= 2),signal);
-          if(active(request)) { setState('idle'); updateTime(); }
-          return;
+        coverAt(Math.max(0,Math.min(gateTarget,duration - 0.02)));
+        pendingPosition = gateTarget;
+        while(active(request)) {
+          gateStage = 'aligning';
+          stopPlayers();
+          const alignedFrames = videos.map((video,index) => {
+            const frame = submitted[index];
+            // A stream that advanced must submit its sought frame again.
+            const lastFrame = video.ended && video.duration - gateTarget <= 0.1 &&
+              Math.abs(frame.mediaTime - gateTarget) <= 0.1;
+            const reusable = lastFrame || (Math.abs(video.currentTime - frame.mediaTime) < 0.025 &&
+              Math.abs(frame.mediaTime - gateTarget) <= 0.04) ? frame : null;
+            const ready = frameReady(video,request,signal,gateTarget,reusable);
+            video.currentTime = gateTarget;
+            return ready;
+          });
+          submitted = await Promise.all(alignedFrames);
+          const atEnd = gateTarget >= duration - 0.1;
+          await waitFor(() => videos.every((video) => !video.seeking && video.readyState >= (autoplay && !atEnd ? 3 : 2)),signal);
+          await nextPaint(request,signal);
+          if(!active(request)) return;
+          if(!autoplay || atEnd) {
+            wantedPlay = false;
+            reveal(request);
+            setState('idle');
+            return;
+          }
+          gateStage = 'starting';
+          // Target frames are already submitted. The native play promises
+          // confirm both starts without waiting for a nonexistent next frame
+          // when the requested position is the clip's last frame.
+          await Promise.all(videos.map((video) => video.play()));
+          await waitFor(() => videos.every((video) => !video.seeking && (!video.paused || video.ended) && video.readyState >= 3),signal);
+          await nextPaint(request,signal);
+          if(!active(request) || !wantedPlay) return;
+          // A delayed play promise must not expose a new lead or skip the
+          // requested opening. Any retry stays behind the same opaque covers.
+          const positions = videos.map((video) => video.currentTime);
+          if(Math.abs(positions[0] - positions[1]) <= 0.12 &&
+             positions.every((position) => Math.abs(position - gateTarget) <= 0.3)) break;
         }
+        if(!active(request)) return;
+        // This is the only reveal path. No initialization rewind runs after it.
+        reveal(request);
+        if(videos.some((video) => video.ended)) { pause(); return; }
+        setState('playing');
+        syncTimer = window.setInterval(synchronize,250);
       } catch (_) {
         if(active(request) && !signal.aborted) fail(request);
       }
     }
     function play(position) { return begin(position,true,true); }
     function synchronize() {
-      if(!wantedPlay || waitingFor || phase !== 'playing') return;
+      if(startupPending || !wantedPlay || waitingFor || phase !== 'playing') return;
       if(document.hidden) { pause({release:true}); return; }
       if(videos.some((video) => video.ended || video.currentTime >= duration - 0.03)) { pause(); return; }
       if(videos.some((video) => video.paused || video.seeking || video.readyState < 3)) return;
@@ -266,8 +435,11 @@
       lastResync = -Infinity;
       baseline.poster = selected.baselinePoster;
       ours.poster = selected.poster;
+      covers[0].src = selected.baselinePoster;
+      covers[1].src = selected.poster;
       duration = selected.duration;
       seek.max = duration;
+      coverAt(0);
       updateTime(0);
       $(`#${promptId}`).textContent = selected.prompt;
       error.hidden = true;
@@ -280,10 +452,12 @@
     picker.innerHTML = items.map((item,i) => `<button type="button" data-scene="${i}" aria-pressed="false">${escape(item.title)}</button>`).join('');
     picker.addEventListener('click', (event) => { const button = event.target.closest('[data-scene]'); if(button) select(Number(button.dataset.scene),true); });
     playButton.addEventListener('click', () => wantedPlay || phase !== 'idle' ? pause({release:phase !== 'playing'}) : void play());
-    $(`#${prefix}-reset`).addEventListener('click', () => { pause(); pendingPosition = null; if(prepared) void begin(0,false); else updateTime(0); });
+    $(`#${prefix}-reset`).addEventListener('click', () => { pause(); pendingPosition = null; if(prepared) void begin(0,false); else coverAt(0); });
     seek.addEventListener('input', () => {
       const position = Number(seek.value);
       if(!scrubbing) { const resume = wantedPlay; pause(); scrubbing = true; scrubResume = resume; }
+      pendingPosition = position;
+      coverAt(position);
       seek.value = position;
       clock.textContent = `${time(position)} / ${time(Math.ceil(duration))}`;
     });
@@ -302,9 +476,7 @@
       const peer = video === ours ? baseline : ours;
       video.addEventListener('waiting', () => {
         if(!wantedPlay || video.paused || !matchesSource(video)) return;
-        // Both streams need continuous play intent during startup, including
-        // their initial waiting events before the first frames arrive.
-        if(started.size < videos.length) { setState('loading'); return; }
+        if(startupPending) return;
         // Keep this stream's native play intent alive so Chrome continues
         // fetching. Only hold its peer; pausing both can stall cellular fetch.
         waitingFor = video;
@@ -313,27 +485,31 @@
       });
       video.addEventListener('playing', () => {
         if(video.paused || !matchesSource(video)) return;
-        if(!wantedPlay || document.hidden) { video.pause(); return; }
-        const firstSharedStart = !started.has(video) && started.size === videos.length - 1;
-        started.add(video);
-        if(firstSharedStart) {
-          // Unequal server response times can let one stream start early.
-          // Rewind that leader once to the slower clock, preserving the intro.
-          const anchor = Math.min(...videos.map((item) => item.currentTime));
-          videos.forEach((item) => { if(item.currentTime - anchor > 0.25) item.currentTime = anchor; });
-          lastResync = performance.now();
+        if(startupPending) {
+          if(gateStage === 'idle' || !operation || operation.signal.aborted) video.pause();
+          return;
         }
+        if(!wantedPlay || document.hidden) { video.pause(); return; }
         if(waitingFor && waitingFor !== video) { video.pause(); return; }
         if(waitingFor === video) { waitingFor = null; requestPlay(peer,requestId); }
         if(videos.every((item) => !item.paused && item.readyState >= 3)) setState('playing');
       });
-      video.addEventListener('play', () => { if(!wantedPlay) video.pause(); });
+      video.addEventListener('play', () => {
+        if(!wantedPlay && !(startupPending && ['priming','starting'].includes(gateStage))) video.pause();
+      });
       video.addEventListener('pause', () => {
+        if(startupPending) return;
         if(wantedPlay && video.paused && (!waitingFor || waitingFor === video) && phase === 'playing') pause();
       });
-      video.addEventListener('ended', () => { if(matchesSource(video)) { pause(); updateTime(); } });
+      video.addEventListener('ended', () => { if(!startupPending && matchesSource(video)) { pause(); updateTime(); } });
       video.addEventListener('error', () => { if(prepared && video.error) fail(requestId); });
     });
+    element.addEventListener('click', (event) => {
+      if(startupPending && event.target.closest('[data-fullscreen]')) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    },true);
     const prepareObserver = new IntersectionObserver((entries) => entries.forEach(({isIntersecting}) => {
       nearViewport = isIntersecting;
       if(isIntersecting) prepare(wantedPlay);
@@ -370,7 +546,9 @@
   $('#world-revisit').addEventListener('click', () => { if(worldHighlight) worldComparison.play(worldHighlight.time); });
   document.querySelectorAll('[data-fullscreen]').forEach((button) => button.addEventListener('click', async () => {
     const video = document.getElementById(button.dataset.fullscreen);
-    try { if(video.requestFullscreen) await video.requestFullscreen(); else if(video.webkitEnterFullscreen) video.webkitEnterFullscreen(); } catch (_) { /* Fullscreen may be unavailable in embedded browsers. */ }
+    if(video.closest('.paired-videos')?.dataset.startupPending === 'true') return;
+    const viewport = video.closest('.comparison-viewport') || video;
+    try { if(viewport.requestFullscreen) await viewport.requestFullscreen(); else if(video.webkitEnterFullscreen) video.webkitEnterFullscreen(); } catch (_) { /* Fullscreen may be unavailable in embedded browsers. */ }
   }));
   const contentObserver = new IntersectionObserver((entries) => entries.forEach(({target,isIntersecting}) => { if(!isIntersecting) target.pause(); }), {threshold:0});
   longVideos.forEach((video) => contentObserver.observe(video));
