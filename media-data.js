@@ -5,18 +5,19 @@ window.HF_MEDIA = {
       "id": "03_glacial_cave",
       "title": "Glacial cave",
       "prompt": "On a glacial cave floor lit by blue ice, a guide in a yellow parka and crampons fills the foreground in HDR 4K with crystalline detail. First, she runs her glove along a translucent wall and watches light refract into icy veins, her headlamp shimmering. Then she steps deeper, swings a lantern to illuminate a tunnel, and beckons forward as the camera follows, revealing arches of ice, dripping stalactites, and a world that feels otherworldly but precise. as cold air crackles.",
-      "baseline": "assets/videos/15s/03_glacial_cave-baseline.mp4",
-      "ours": "assets/videos/15s/03_glacial_cave-ours.mp4",
+      "baseline": "assets/videos/15s/03_glacial_cave-baseline.mp4?v=8e00db935559",
+      "ours": "assets/videos/15s/03_glacial_cave-ours.mp4?v=b5bc02477260",
       "baselinePoster": "assets/posters/15s/03_glacial_cave-baseline.jpg",
       "poster": "assets/posters/15s/03_glacial_cave-ours.jpg",
-      "duration": 15.5625
+      "duration": 15.5625,
+      "preview": "assets/videos/previews/glacial-cave.mp4?v=e4c1c448179a"
     },
     {
       "id": "05_seoul_violinist",
       "title": "Seoul violinist",
       "prompt": "At a rooftop garden above Seoul at night, a violinist in a black velvet coat and sparkling hairpin stands prominent in ultra-realistic 4K with city lights bokeh. First, she tightens one string and holds still as a breeze lifts her coat hem, distant traffic humming. Then she draws the bow into a bright phrase and takes two steps forward, the camera drifting closer as skyscrapers glitter behind her and lanterns glow, textures rich and the mood intensely alive. while the skyline shimmers softly.",
-      "baseline": "assets/videos/15s/05_seoul_violinist-baseline.mp4",
-      "ours": "assets/videos/15s/05_seoul_violinist-ours.mp4",
+      "baseline": "assets/videos/15s/05_seoul_violinist-baseline.mp4?v=f2ce8703515e",
+      "ours": "assets/videos/15s/05_seoul_violinist-ours.mp4?v=c0a46202484a",
       "baselinePoster": "assets/posters/15s/05_seoul_violinist-baseline.jpg",
       "poster": "assets/posters/15s/05_seoul_violinist-ours.jpg",
       "duration": 15.5625
@@ -25,8 +26,8 @@ window.HF_MEDIA = {
       "id": "01_hong_kong_tram",
       "title": "Hong Kong tram",
       "prompt": "On a cliffside tram in Hong Kong at night, a businessman in a sharp black coat and patterned tie dominates the frame in ultra-realistic UHD with neon reflections. First, he straightens his cuff, checks the city map on his phone, and watches rain streak down the window. Then he steps off at a lookout, spreads his arms, and takes a deep breath as the camera pans to a skyline of lights and mist, the city monumental and glittering. with rain sounds soft.",
-      "baseline": "assets/videos/15s/01_hong_kong_tram-baseline.mp4",
-      "ours": "assets/videos/15s/01_hong_kong_tram-ours.mp4",
+      "baseline": "assets/videos/15s/01_hong_kong_tram-baseline.mp4?v=16ada50417bd",
+      "ours": "assets/videos/15s/01_hong_kong_tram-ours.mp4?v=98c168b79485",
       "baselinePoster": "assets/posters/15s/01_hong_kong_tram-baseline.jpg",
       "poster": "assets/posters/15s/01_hong_kong_tram-ours.jpg",
       "duration": 15.5625
@@ -35,8 +36,8 @@ window.HF_MEDIA = {
       "id": "06_desert_carnival",
       "title": "Desert carnival",
       "prompt": "At midsummer in a glowing desert carnival, a man in a white linen shirt and bright patterned sash dominates the frame in cinematic UHD. He flips a coin through his fingers, then raises a sparkling drink as fireworks haze drifts above striped tents. The camera arcs around his shoulders, catching heat shimmer, dust motes, and gold jewelry highlights. Behind him, lanterns float over sand dunes and a violet sunset deepens the horizon. Sharp textures and true color science make the spectacle feel vivid and real.",
-      "baseline": "assets/videos/15s/06_desert_carnival-baseline.mp4",
-      "ours": "assets/videos/15s/06_desert_carnival-ours.mp4",
+      "baseline": "assets/videos/15s/06_desert_carnival-baseline.mp4?v=f3a557818e0b",
+      "ours": "assets/videos/15s/06_desert_carnival-ours.mp4?v=e2bda579aa22",
       "baselinePoster": "assets/posters/15s/06_desert_carnival-baseline.jpg",
       "poster": "assets/posters/15s/06_desert_carnival-ours.jpg",
       "duration": 15.5625
@@ -47,15 +48,16 @@ window.HF_MEDIA = {
       "id": "yoga",
       "title": "Park yoga",
       "prompt": "A woman practices yoga in a peaceful park, moving gracefully through a series of poses, focusing on balance and flexibility.",
-      "src": "assets/videos/60s/yoga.mp4",
+      "src": "assets/videos/60s/yoga.mp4?v=e7b94a620a4d",
       "poster": "assets/posters/60s/yoga.jpg",
-      "duration": 62.8125
+      "duration": 62.8125,
+      "preview": "assets/videos/previews/yoga.mp4?v=34401e4bf5d5"
     },
     {
       "id": "pottery",
       "title": "Pottery wheel",
       "prompt": "Macro cinematography, slow motion shot: A sculptor's hands shape wet clay on a wheel, and as the wheel spins. Camera captures the tactile quality of the clay and the fluid motion of the sculptor’s hands.",
-      "src": "assets/videos/60s/pottery.mp4",
+      "src": "assets/videos/60s/pottery.mp4?v=a23bab06d167",
       "poster": "assets/posters/60s/pottery.jpg",
       "duration": 62.8125
     },
@@ -63,7 +65,7 @@ window.HF_MEDIA = {
       "id": "dumplings",
       "title": "Making dumplings",
       "prompt": "A Chinese couple are making dumplings together.",
-      "src": "assets/videos/60s/dumplings.mp4",
+      "src": "assets/videos/60s/dumplings.mp4?v=734d3fbc516b",
       "poster": "assets/posters/60s/dumplings.jpg",
       "duration": 62.8125
     },
@@ -71,7 +73,7 @@ window.HF_MEDIA = {
       "id": "guitar",
       "title": "Acoustic guitar",
       "prompt": "A musician strumming the strings of an acoustic guitar, lost in the melody of their song.",
-      "src": "assets/videos/60s/guitar.mp4",
+      "src": "assets/videos/60s/guitar.mp4?v=1d81afbe54d7",
       "poster": "assets/posters/60s/guitar.jpg",
       "duration": 62.8125
     },
@@ -79,7 +81,7 @@ window.HF_MEDIA = {
       "id": "brushing",
       "title": "Mirror reflection",
       "prompt": "A person is brushing their teeth in front of a mirror, their mouth slightly open as they clean each tooth.",
-      "src": "assets/videos/60s/brushing.mp4",
+      "src": "assets/videos/60s/brushing.mp4?v=9cf84ff0c8dd",
       "poster": "assets/posters/60s/brushing.jpg",
       "duration": 62.8125
     },
@@ -87,7 +89,7 @@ window.HF_MEDIA = {
       "id": "chef",
       "title": "Chef at work",
       "prompt": "An over-the-shoulder perspective of a chef meticulously plating a dish in a bustling kitchen.",
-      "src": "assets/videos/60s/chef.mp4",
+      "src": "assets/videos/60s/chef.mp4?v=538ead2302cb",
       "poster": "assets/posters/60s/chef.jpg",
       "duration": 62.8125
     }
@@ -97,18 +99,19 @@ window.HF_MEDIA = {
       "id": "03_milk_pouring",
       "title": "Pouring milk",
       "prompt": "Style: Photorealistic. First-person view. A clear drinking glass stands on a light gray surface as a stream of white milk pours into it from above. The milk continues to flow into the glass, gradually raising the liquid level and forming a light layer of foam.",
-      "baseline": "assets/videos/world/03_milk_pouring-baseline.mp4",
-      "ours": "assets/videos/world/03_milk_pouring-ours.mp4",
+      "baseline": "assets/videos/world/03_milk_pouring-baseline.mp4?v=e21df6ce05da",
+      "ours": "assets/videos/world/03_milk_pouring-ours.mp4?v=d502abd77418",
       "baselinePoster": "assets/posters/world/03_milk_pouring-baseline.jpg",
       "poster": "assets/posters/world/03_milk_pouring-ours.jpg",
-      "duration": 14.8125
+      "duration": 14.8125,
+      "preview": "assets/videos/previews/milk.mp4?v=751fad1cb1ac"
     },
     {
       "id": "01_watercolor",
       "title": "Watercolor painting",
       "prompt": "Style: Photorealistic. First-person view. A close-up view of a hand painting on taped watercolor paper laid on cardboard, with a pale green stripe beside a pale blue wash and a paint palette behind it. The brush deposits more green pigment along the same green stripe, gradually making the wet green wash darker and richer. The earlier blue wash and green marks remain on the same sheet as the pigment accumulates.",
-      "baseline": "assets/videos/world/01_watercolor-baseline.mp4",
-      "ours": "assets/videos/world/01_watercolor-ours.mp4",
+      "baseline": "assets/videos/world/01_watercolor-baseline.mp4?v=2fa7101c9405",
+      "ours": "assets/videos/world/01_watercolor-ours.mp4?v=faff9acb5d81",
       "baselinePoster": "assets/posters/world/01_watercolor-baseline.jpg",
       "poster": "assets/posters/world/01_watercolor-ours.jpg",
       "duration": 15.5625
@@ -117,8 +120,8 @@ window.HF_MEDIA = {
       "id": "05_sand_filling",
       "title": "Filling with sand",
       "prompt": "Style: Photorealistic. First-person view. A single clear glass jar stands on a rustic wooden table, with a glass funnel fitted in its opening. Dry sand trickles steadily from the funnel into the jar. The conical sand pile at the bottom of the jar gradually grows taller as the sand level in the funnel slowly decreases. The jar and funnel stay upright in the same place.",
-      "baseline": "assets/videos/world/05_sand_filling-baseline.mp4",
-      "ours": "assets/videos/world/05_sand_filling-ours.mp4",
+      "baseline": "assets/videos/world/05_sand_filling-baseline.mp4?v=46277e7e48eb",
+      "ours": "assets/videos/world/05_sand_filling-ours.mp4?v=5c13686d5817",
       "baselinePoster": "assets/posters/world/05_sand_filling-baseline.jpg",
       "poster": "assets/posters/world/05_sand_filling-ours.jpg",
       "duration": 15.5625
@@ -128,8 +131,9 @@ window.HF_MEDIA = {
     "id": "03_milk_pouring",
     "title": "Pouring milk",
     "prompt": "Style: Photorealistic. First-person view. A clear drinking glass stands on a light gray surface as a stream of white milk pours into it from above. The milk continues to flow into the glass, gradually raising the liquid level and forming a light layer of foam.",
+    "src": "assets/videos/world/03_milk_pouring-ours.mp4?v=d502abd77418",
     "poster": "assets/posters/world/03_milk_pouring-ours.jpg",
     "duration": 14.8125,
-    "src": "assets/videos/world/03_milk_pouring-ours.mp4"
+    "preview": "assets/videos/previews/milk.mp4?v=751fad1cb1ac"
   }
 };
