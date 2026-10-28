@@ -77,6 +77,7 @@
     let expectedSources = [];
     let wantedPlay = false;
     let waitingFor = null;
+    const started = new Set();
     let phase = 'idle';
     let requestId = 0;
     let operation;
@@ -116,6 +117,7 @@
       operation?.abort();
       operation = undefined;
       waitingFor = null;
+      started.clear();
       window.clearInterval(syncTimer);
       syncTimer = undefined;
       stopPlayers();
@@ -140,8 +142,11 @@
       expectedSources = sources.map((url) => new URL(url,document.baseURI).href);
       videos.forEach((video,index) => {
         video.dataset.source = sources[index];
-        video.preload = forPlayback ? 'auto' : 'metadata';
       });
+      // Prepare identities near the viewport without a metadata-only request
+      // that could stop early and require another remote Range round trip.
+      if(!forPlayback) return;
+      videos.forEach((video) => { video.preload = 'auto'; });
       if(prepared) {
         if(forPlayback && videos.some((video) => video.error)) videos.forEach((video) => video.load());
         return;
@@ -204,27 +209,35 @@
       if(announce) announcePlayback();
       try {
         if(document.hidden) { pause({release:true}); return; }
-        prepare(autoplay);
-        // Read only timing information before starting. Native play drives
-        // progressive download; no fixed buffer or full-file gate is used.
+        prepare(true);
+        let destination = pendingPosition;
+        if(destination === null && (videos.some((video) => video.ended) || ours.currentTime >= duration - 0.08)) destination = 0;
+        function applyPosition(video) {
+          if(!active(request) || destination === null) return;
+          const end = Number.isFinite(video.duration) ? Math.min(duration,video.duration) : duration;
+          const target = Math.max(0,Math.min(destination,end - 0.02));
+          if(Math.abs(video.currentTime - target) > 0.025) video.currentTime = target;
+        }
+        videos.forEach((video) => {
+          if(video.readyState >= 1) applyPosition(video);
+          else if(destination !== null) video.addEventListener('loadedmetadata',() => applyPosition(video),{once:true,signal});
+        });
+        if(autoplay) {
+          // Play intent starts before metadata: the first media response can
+          // continue into playback instead of being paused after its header.
+          videos.forEach((video) => { video.playbackRate = rate(); requestPlay(video,request); });
+          syncTimer = window.setInterval(synchronize,250);
+        }
         await waitFor(() => videos.every((video) => video.readyState >= 1),signal);
         if(!active(request)) return;
         duration = Math.min(selected.duration,...videos.map((video) => Number.isFinite(video.duration) ? video.duration : selected.duration));
         seek.max = duration;
-        let destination = pendingPosition;
-        if(destination === null && (videos.some((video) => video.ended) || ours.currentTime >= duration - 0.08)) destination = 0;
-        if(destination !== null) {
-          destination = Math.max(0,Math.min(destination,duration - 0.02));
-          videos.forEach((video) => { if(Math.abs(video.currentTime - destination) > 0.025) video.currentTime = destination; });
-        }
         pendingPosition = null;
         if(!autoplay) {
           await waitFor(() => videos.every((video) => !video.seeking && video.readyState >= 2),signal);
           if(active(request)) { setState('idle'); updateTime(); }
           return;
         }
-        videos.forEach((video) => { video.playbackRate = rate(); requestPlay(video,request); });
-        syncTimer = window.setInterval(synchronize,250);
       } catch (_) {
         if(active(request) && !signal.aborted) fail(request);
       }
@@ -289,6 +302,9 @@
       const peer = video === ours ? baseline : ours;
       video.addEventListener('waiting', () => {
         if(!wantedPlay || video.paused || !matchesSource(video)) return;
+        // Both streams need continuous play intent during startup, including
+        // their initial waiting events before the first frames arrive.
+        if(started.size < videos.length) { setState('loading'); return; }
         // Keep this stream's native play intent alive so Chrome continues
         // fetching. Only hold its peer; pausing both can stall cellular fetch.
         waitingFor = video;
@@ -298,6 +314,15 @@
       video.addEventListener('playing', () => {
         if(video.paused || !matchesSource(video)) return;
         if(!wantedPlay || document.hidden) { video.pause(); return; }
+        const firstSharedStart = !started.has(video) && started.size === videos.length - 1;
+        started.add(video);
+        if(firstSharedStart) {
+          // Unequal server response times can let one stream start early.
+          // Rewind that leader once to the slower clock, preserving the intro.
+          const anchor = Math.min(...videos.map((item) => item.currentTime));
+          videos.forEach((item) => { if(item.currentTime - anchor > 0.25) item.currentTime = anchor; });
+          lastResync = performance.now();
+        }
         if(waitingFor && waitingFor !== video) { video.pause(); return; }
         if(waitingFor === video) { waitingFor = null; requestPlay(peer,requestId); }
         if(videos.every((item) => !item.paused && item.readyState >= 3)) setState('playing');
