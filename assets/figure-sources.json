@@ -1,0 +1,44 @@
+[
+  {
+    "source": "figure/teaser.pdf",
+    "image": "assets/images/teaser.webp",
+    "width": 2600,
+    "height": 1019,
+    "bytes": 634940
+  },
+  {
+    "source": "figure/overview.pdf",
+    "image": "assets/images/overview.webp",
+    "width": 2600,
+    "height": 1062,
+    "bytes": 342902
+  },
+  {
+    "source": "figure/distillation_targets_arxiv.pdf",
+    "image": "assets/images/distillation-targets.webp",
+    "width": 2200,
+    "height": 666,
+    "bytes": 70472
+  },
+  {
+    "source": "figure/logos/zju-logo-cropped.png",
+    "image": "assets/images/zhejiang-university.png",
+    "width": 657,
+    "height": 176,
+    "bytes": 28910
+  },
+  {
+    "source": "figure/logos/adelaide-logo.png",
+    "image": "assets/images/adelaide-university.png",
+    "width": 1200,
+    "height": 287,
+    "bytes": 46671
+  },
+  {
+    "source": "figure/logos/microsoft.pdf",
+    "image": "assets/images/microsoft.png",
+    "width": 800,
+    "height": 175,
+    "bytes": 12425
+  }
+]
