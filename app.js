@@ -70,12 +70,13 @@
     const error = $(`#${prefix}-error`);
     const picker = $(`#${pickerId}`);
     const clock = $(`#${prefix}-time`);
-    const useFetch = /^https?:$/.test(window.location.protocol);
     let selected = items[0];
     let duration = selected.duration;
-    let objectURLs = [];
     let prepared = false;
+    let nearViewport = false;
+    let expectedSources = [];
     let wantedPlay = false;
+    let waitingFor = null;
     let phase = 'idle';
     let requestId = 0;
     let operation;
@@ -87,18 +88,25 @@
 
     const rate = () => Number(speed.value) || 1;
     const active = (request) => request === requestId && !operation?.signal.aborted;
-    function setState(next,progress = '0%') {
+    const matchesSource = (video) => video.currentSrc === expectedSources[videos.indexOf(video)];
+    function sourceURLs() {
+      return [selected.baselineWeb || selected.baseline,selected.oursWeb || selected.ours];
+    }
+    function setState(next) {
       phase = next;
       element.dataset.playbackState = next;
-      const busy = ['loading','buffering','seeking'].includes(next);
       playButton.disabled = false;
-      playButton.setAttribute('aria-busy',String(busy));
+      playButton.setAttribute('aria-busy',String(['loading','buffering','seeking'].includes(next)));
       playButton.setAttribute('aria-pressed',String(wantedPlay));
-      if(next === 'playing') playButton.textContent = 'Pause both';
-      else if(next === 'loading') playButton.textContent = `Loading ${progress} · Cancel`;
-      else if(next === 'buffering') playButton.textContent = 'Buffering… Cancel';
-      else if(next === 'seeking') playButton.textContent = 'Seeking… Cancel';
-      else playButton.textContent = 'Play both';
+      playButton.textContent = next === 'playing' ? 'Pause both'
+        : next === 'loading' ? 'Loading\u2026 Cancel'
+        : next === 'buffering' ? 'Buffering\u2026 Cancel'
+        : next === 'seeking' ? 'Seeking\u2026 Cancel' : 'Play both';
+    }
+    function updateTime(position = pendingPosition ?? ours.currentTime ?? 0) {
+      if(scrubbing) return;
+      seek.value = Math.min(position,duration);
+      clock.textContent = `${time(position)} / ${time(Math.ceil(duration))}`;
     }
     function stopPlayers() {
       videos.forEach((video) => { video.pause(); video.playbackRate = rate(); });
@@ -107,24 +115,39 @@
       requestId++;
       operation?.abort();
       operation = undefined;
+      waitingFor = null;
       window.clearInterval(syncTimer);
       syncTimer = undefined;
       stopPlayers();
     }
-    function updateTime(position = pendingPosition ?? ours.currentTime ?? 0) {
-      if(scrubbing) return;
-      seek.value = Math.min(position,duration);
-      clock.textContent = `${time(position)} / ${time(Math.ceil(duration))}`;
+    function unload() {
+      prepared = false;
+      videos.forEach((video) => { video.removeAttribute('src'); video.preload = 'none'; video.load(); });
     }
-    function pause() {
+    function pause({release = false} = {}) {
+      const downloading = release && prepared && videos.some((video) => video.networkState === 2);
+      const position = pendingPosition ?? ours.currentTime ?? 0;
       wantedPlay = false;
       scrubbing = false;
       scrubResume = false;
-      // Aborting also cancels both streamed HTTP downloads. Completed Blob
-      // sources remain available for seeking and resuming the current scene.
       cancelOperation();
+      if(downloading) { pendingPosition = position; unload(); }
       setState('idle');
       updateTime();
+    }
+    function prepare(forPlayback = false) {
+      const sources = sourceURLs();
+      expectedSources = sources.map((url) => new URL(url,document.baseURI).href);
+      videos.forEach((video,index) => {
+        video.dataset.source = sources[index];
+        video.preload = forPlayback ? 'auto' : 'metadata';
+      });
+      if(prepared) {
+        if(forPlayback && videos.some((video) => video.error)) videos.forEach((video) => video.load());
+        return;
+      }
+      prepared = true;
+      videos.forEach((video,index) => { video.muted = true; video.src = sources[index]; video.load(); });
     }
     function waitFor(condition,signal) {
       return new Promise((resolve,reject) => {
@@ -132,7 +155,7 @@
         const events = ['loadedmetadata','loadeddata','canplay','seeked','durationchange','error'];
         const abort = () => finish(new DOMException('Cancelled','AbortError'));
         const interval = window.setInterval(check,100);
-        const timer = window.setTimeout(() => finish(new Error('decode-timeout')),30000);
+        const timer = window.setTimeout(() => finish(new Error('timeout')),45000);
         function cleanup() {
           window.clearInterval(interval);
           window.clearTimeout(timer);
@@ -150,78 +173,24 @@
         check();
       });
     }
-    function prepare() {
-      // Posters and source identities are sufficient before interaction. Do
-      // not issue even metadata requests that compete with visible videos.
-      videos.forEach((video,index) => {
-        video.dataset.source = index === 0 ? selected.baseline : selected.ours;
-        if(!prepared) video.preload = 'none';
-      });
+    function fail(request) {
+      if(!active(request)) return;
+      pause({release:true});
+      error.textContent = 'The videos could not play. Please try again or choose another scene.';
+      error.hidden = false;
     }
-    async function acquireSources(signal,request) {
-      if(prepared) {
-        if(videos.some((video) => video.error)) videos.forEach((video) => video.load());
-        return;
-      }
-      if(useFetch) {
-        const loaded = [0,0];
-        const totals = [0,0];
-        function showProgress() {
-          if(!active(request)) return;
-          const bytes = loaded[0] + loaded[1];
-          const progress = totals.every((total) => total > 0)
-            ? `${Math.min(100,Math.floor(100 * bytes / (totals[0] + totals[1])))}%`
-            : `${(bytes / 1048576).toFixed(1)} MB`;
-          setState('loading',progress);
-        }
-        async function download(url,index) {
-          const response = await fetch(url,{signal});
-          if(!response.ok) throw new Error('download');
-          totals[index] = Number(response.headers.get('Content-Length')) || 0;
-          showProgress();
-          if(!response.body?.getReader) {
-            const blob = await response.blob();
-            loaded[index] = blob.size;
-            totals[index] = blob.size;
-            showProgress();
-            return blob;
-          }
-          const reader = response.body.getReader();
-          const chunks = [];
-          try {
-            while(true) {
-              const {done,value} = await reader.read();
-              if(done) break;
-              chunks.push(value);
-              loaded[index] += value.byteLength;
-              showProgress();
-            }
-          } finally {
-            reader.releaseLock();
-          }
-          if(!loaded[index]) throw new Error('empty-video');
-          return new Blob(chunks,{type:response.headers.get('Content-Type') || 'video/mp4'});
-        }
-        setState('loading');
-        // No fixed download deadline: a slow connection may keep making
-        // progress, and the visitor can cancel at any time.
-        const blobs = await Promise.all([download(selected.baseline,0),download(selected.ours,1)]);
-        if(!active(request) || signal.aborted) return;
-        objectURLs = blobs.map((blob) => URL.createObjectURL(blob));
-      }
-      if(!active(request) || signal.aborted) return;
-      prepared = true;
-      videos.forEach((video,index) => {
-        video.muted = true;
-        video.preload = 'auto';
-        video.src = useFetch ? objectURLs[index] : video.dataset.source;
-        video.load();
+    function requestPlay(video,request) {
+      if(!active(request) || !wantedPlay || document.hidden || (waitingFor && waitingFor !== video)) return;
+      video.play().catch((problem) => {
+        // Holding the other stream during buffering intentionally aborts its
+        // pending play promise. It resumes from the playing event below.
+        if(problem.name !== 'AbortError' && active(request) && wantedPlay) fail(request);
       });
     }
     function announcePlayback() {
       document.dispatchEvent(new CustomEvent('hf:playback-request',{detail:{owner:element}}));
     }
-    async function begin(position,autoplay,reason = 'loading',announce = false) {
+    async function begin(position,autoplay,announce = false) {
       cancelOperation();
       const request = requestId;
       operation = new AbortController();
@@ -231,13 +200,14 @@
       scrubResume = false;
       if(typeof position === 'number') pendingPosition = Math.max(0,Math.min(position,duration));
       error.hidden = true;
-      setState(prepared ? (autoplay ? reason : 'seeking') : 'loading');
+      setState(autoplay ? 'loading' : 'seeking');
       if(announce) announcePlayback();
       try {
-        if(document.hidden) { pause(); return; }
-        await acquireSources(signal,request);
-        if(!active(request)) return;
-        await waitFor(() => videos.every((video) => video.readyState >= 2),signal);
+        if(document.hidden) { pause({release:true}); return; }
+        prepare(autoplay);
+        // Read only timing information before starting. Native play drives
+        // progressive download; no fixed buffer or full-file gate is used.
+        await waitFor(() => videos.every((video) => video.readyState >= 1),signal);
         if(!active(request)) return;
         duration = Math.min(selected.duration,...videos.map((video) => Number.isFinite(video.duration) ? video.duration : selected.duration));
         seek.max = duration;
@@ -248,49 +218,36 @@
           videos.forEach((video) => { if(Math.abs(video.currentTime - destination) > 0.025) video.currentTime = destination; });
         }
         pendingPosition = null;
-        setState(autoplay ? 'buffering' : 'seeking');
-        await waitFor(() => videos.every((video) => !video.seeking && (video.readyState >= (autoplay ? 3 : 2) ||
-          (Math.min(duration,video.duration) - video.currentTime <= 0.1 && video.readyState >= 2))),signal);
-        if(!active(request)) return;
-        if(!autoplay) { setState('idle'); updateTime(); return; }
-        videos.forEach((video) => { video.playbackRate = rate(); });
-        await Promise.all(videos.map((video) => video.play()));
-        if(!active(request) || !wantedPlay) return;
-        setState('playing');
+        if(!autoplay) {
+          await waitFor(() => videos.every((video) => !video.seeking && video.readyState >= 2),signal);
+          if(active(request)) { setState('idle'); updateTime(); }
+          return;
+        }
+        videos.forEach((video) => { video.playbackRate = rate(); requestPlay(video,request); });
         syncTimer = window.setInterval(synchronize,250);
-      } catch (problem) {
-        if(!active(request) || signal.aborted) return;
-        pause();
-        error.textContent = problem.message === 'decode-timeout'
-          ? 'The videos could not start. Please try again or choose another scene.'
-          : 'The videos could not be loaded. Please try again when your connection is ready.';
-        error.hidden = false;
+      } catch (_) {
+        if(active(request) && !signal.aborted) fail(request);
       }
     }
-    function play(position) { return begin(position,true,'loading',true); }
-    function rebuffer() { if(wantedPlay && phase === 'playing') void begin(undefined,true,'buffering'); }
+    function play(position) { return begin(position,true,true); }
     function synchronize() {
-      if(!wantedPlay || phase !== 'playing') return;
-      if(document.hidden) { pause(); return; }
+      if(!wantedPlay || waitingFor || phase !== 'playing') return;
+      if(document.hidden) { pause({release:true}); return; }
       if(videos.some((video) => video.ended || video.currentTime >= duration - 0.03)) { pause(); return; }
-      if(videos.some((video) => video.seeking || video.readyState < 3)) { rebuffer(); return; }
+      if(videos.some((video) => video.paused || video.seeking || video.readyState < 3)) return;
       const drift = baseline.currentTime - ours.currentTime;
       const now = performance.now();
       if(Math.abs(drift) > 0.9 && now - lastResync > 5000) {
         lastResync = now;
-        void begin(ours.currentTime,true,'buffering');
+        baseline.currentTime = ours.currentTime;
         return;
       }
-      // Correct small clock drift through playback rate, not repeated seeks.
       ours.playbackRate = rate();
       baseline.playbackRate = rate() * (Math.abs(drift) < 0.05 ? 1 : 1 - Math.max(-0.06,Math.min(0.06,drift * 0.16)));
     }
-    function select(index) {
+    function select(index,loadNow = false) {
       pause();
-      prepared = false;
-      videos.forEach((video) => { video.removeAttribute('src'); video.preload = 'none'; video.load(); });
-      objectURLs.forEach((url) => URL.revokeObjectURL(url));
-      objectURLs = [];
+      unload();
       selected = items[index];
       pendingPosition = null;
       lastResync = -Infinity;
@@ -301,22 +258,19 @@
       updateTime(0);
       $(`#${promptId}`).textContent = selected.prompt;
       error.hidden = true;
+      const sources = sourceURLs();
+      videos.forEach((video,i) => { video.dataset.source = sources[i]; });
       picker.querySelectorAll('button').forEach((button,i) => button.setAttribute('aria-pressed',String(index===i)));
-      prepare();
       if(onSelect) onSelect(selected);
+      if(nearViewport || loadNow) prepare();
     }
     picker.innerHTML = items.map((item,i) => `<button type="button" data-scene="${i}" aria-pressed="false">${escape(item.title)}</button>`).join('');
-    picker.addEventListener('click', (event) => { const button = event.target.closest('[data-scene]'); if(button) select(Number(button.dataset.scene)); });
-    playButton.addEventListener('click', () => wantedPlay || phase !== 'idle' ? pause() : void play());
+    picker.addEventListener('click', (event) => { const button = event.target.closest('[data-scene]'); if(button) select(Number(button.dataset.scene),true); });
+    playButton.addEventListener('click', () => wantedPlay || phase !== 'idle' ? pause({release:phase !== 'playing'}) : void play());
     $(`#${prefix}-reset`).addEventListener('click', () => { pause(); pendingPosition = null; if(prepared) void begin(0,false); else updateTime(0); });
     seek.addEventListener('input', () => {
       const position = Number(seek.value);
-      if(!scrubbing) {
-        const resume = wantedPlay;
-        pause();
-        scrubbing = true;
-        scrubResume = resume;
-      }
+      if(!scrubbing) { const resume = wantedPlay; pause(); scrubbing = true; scrubResume = resume; }
       seek.value = position;
       clock.textContent = `${time(position)} / ${time(Math.ceil(duration))}`;
     });
@@ -326,29 +280,44 @@
       const resume = scrubResume;
       scrubbing = false;
       scrubResume = false;
-      void begin(position,resume,'loading',true);
+      void begin(position,resume,true);
     });
     seek.addEventListener('pointercancel',pause);
-    speed.addEventListener('change', () => {
-      videos.forEach((video) => { video.playbackRate = rate(); });
-    });
+    speed.addEventListener('change', () => videos.forEach((video) => { video.playbackRate = rate(); }));
     ours.addEventListener('timeupdate', () => updateTime());
     videos.forEach((video) => {
-      video.addEventListener('ended', () => { pause(); updateTime(); });
-      video.addEventListener('waiting',rebuffer);
-      video.addEventListener('play', () => { if(!wantedPlay) video.pause(); });
-      video.addEventListener('pause', () => { if(wantedPlay && phase === 'playing') pause(); });
-      video.addEventListener('error', () => {
-        if(!prepared || !video.error) return;
-        pause();
-        error.textContent = 'This video is unavailable right now. Please try another scene or try again.';
-        error.hidden = false;
+      const peer = video === ours ? baseline : ours;
+      video.addEventListener('waiting', () => {
+        if(!wantedPlay || video.paused || !matchesSource(video)) return;
+        // Keep this stream's native play intent alive so Chrome continues
+        // fetching. Only hold its peer; pausing both can stall cellular fetch.
+        waitingFor = video;
+        peer.pause();
+        setState('buffering');
       });
+      video.addEventListener('playing', () => {
+        if(video.paused || !matchesSource(video)) return;
+        if(!wantedPlay || document.hidden) { video.pause(); return; }
+        if(waitingFor && waitingFor !== video) { video.pause(); return; }
+        if(waitingFor === video) { waitingFor = null; requestPlay(peer,requestId); }
+        if(videos.every((item) => !item.paused && item.readyState >= 3)) setState('playing');
+      });
+      video.addEventListener('play', () => { if(!wantedPlay) video.pause(); });
+      video.addEventListener('pause', () => {
+        if(wantedPlay && video.paused && (!waitingFor || waitingFor === video) && phase === 'playing') pause();
+      });
+      video.addEventListener('ended', () => { if(matchesSource(video)) { pause(); updateTime(); } });
+      video.addEventListener('error', () => { if(prepared && video.error) fail(requestId); });
     });
-    const observer = new IntersectionObserver((entries) => entries.forEach(({isIntersecting}) => { if(!isIntersecting) pause(); }),{threshold:0});
+    const prepareObserver = new IntersectionObserver((entries) => entries.forEach(({isIntersecting}) => {
+      nearViewport = isIntersecting;
+      if(isIntersecting) prepare(wantedPlay);
+    }),{rootMargin:'300px 0px',threshold:0});
+    prepareObserver.observe(element);
+    const observer = new IntersectionObserver((entries) => entries.forEach(({isIntersecting}) => { if(!isIntersecting) pause({release:true}); }),{threshold:0});
     observer.observe(element);
-    document.addEventListener('visibilitychange', () => { if(document.hidden) pause(); });
-    document.addEventListener('hf:playback-request', (event) => { if(event.detail?.owner !== element) pause(); });
+    document.addEventListener('visibilitychange', () => { if(document.hidden) pause({release:true}); });
+    document.addEventListener('hf:playback-request', (event) => { if(event.detail?.owner !== element) pause({release:true}); });
     select(0);
     return {pause,play,element,prepare};
   }

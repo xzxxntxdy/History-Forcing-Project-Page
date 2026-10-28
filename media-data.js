@@ -10,7 +10,9 @@ window.HF_MEDIA = {
       "baselinePoster": "assets/posters/15s/03_glacial_cave-baseline.jpg",
       "poster": "assets/posters/15s/03_glacial_cave-ours.jpg",
       "duration": 15.5625,
-      "preview": "assets/videos/previews/glacial-cave.mp4?v=e4c1c448179a"
+      "preview": "assets/videos/previews/glacial-cave.mp4?v=e4c1c448179a",
+      "baselineWeb": "assets/videos/web/15s/03_glacial_cave-baseline.mp4?v=1fffd7b7709c",
+      "oursWeb": "assets/videos/web/15s/03_glacial_cave-ours.mp4?v=25e29d9c23a5"
     },
     {
       "id": "05_seoul_violinist",
@@ -20,7 +22,9 @@ window.HF_MEDIA = {
       "ours": "assets/videos/15s/05_seoul_violinist-ours.mp4?v=c0a46202484a",
       "baselinePoster": "assets/posters/15s/05_seoul_violinist-baseline.jpg",
       "poster": "assets/posters/15s/05_seoul_violinist-ours.jpg",
-      "duration": 15.5625
+      "duration": 15.5625,
+      "baselineWeb": "assets/videos/web/15s/05_seoul_violinist-baseline.mp4?v=6de277ca7c93",
+      "oursWeb": "assets/videos/web/15s/05_seoul_violinist-ours.mp4?v=f67c87e4e06a"
     },
     {
       "id": "01_hong_kong_tram",
@@ -30,7 +34,9 @@ window.HF_MEDIA = {
       "ours": "assets/videos/15s/01_hong_kong_tram-ours.mp4?v=98c168b79485",
       "baselinePoster": "assets/posters/15s/01_hong_kong_tram-baseline.jpg",
       "poster": "assets/posters/15s/01_hong_kong_tram-ours.jpg",
-      "duration": 15.5625
+      "duration": 15.5625,
+      "baselineWeb": "assets/videos/web/15s/01_hong_kong_tram-baseline.mp4?v=8fe5ee206fee",
+      "oursWeb": "assets/videos/web/15s/01_hong_kong_tram-ours.mp4?v=139ab8291025"
     },
     {
       "id": "06_desert_carnival",
@@ -40,7 +46,9 @@ window.HF_MEDIA = {
       "ours": "assets/videos/15s/06_desert_carnival-ours.mp4?v=e2bda579aa22",
       "baselinePoster": "assets/posters/15s/06_desert_carnival-baseline.jpg",
       "poster": "assets/posters/15s/06_desert_carnival-ours.jpg",
-      "duration": 15.5625
+      "duration": 15.5625,
+      "baselineWeb": "assets/videos/web/15s/06_desert_carnival-baseline.mp4?v=2b146a9ffd90",
+      "oursWeb": "assets/videos/web/15s/06_desert_carnival-ours.mp4?v=9b98e26df2a4"
     }
   ],
   "long": [
@@ -104,7 +112,9 @@ window.HF_MEDIA = {
       "baselinePoster": "assets/posters/world/03_milk_pouring-baseline.jpg",
       "poster": "assets/posters/world/03_milk_pouring-ours.jpg",
       "duration": 14.8125,
-      "preview": "assets/videos/previews/milk.mp4?v=751fad1cb1ac"
+      "preview": "assets/videos/previews/milk.mp4?v=751fad1cb1ac",
+      "baselineWeb": "assets/videos/web/world/03_milk_pouring-baseline.mp4?v=494a89e9c89d",
+      "oursWeb": "assets/videos/web/world/03_milk_pouring-ours.mp4?v=f2e38b23312c"
     },
     {
       "id": "01_watercolor",
@@ -114,7 +124,9 @@ window.HF_MEDIA = {
       "ours": "assets/videos/world/01_watercolor-ours.mp4?v=faff9acb5d81",
       "baselinePoster": "assets/posters/world/01_watercolor-baseline.jpg",
       "poster": "assets/posters/world/01_watercolor-ours.jpg",
-      "duration": 15.5625
+      "duration": 15.5625,
+      "baselineWeb": "assets/videos/web/world/01_watercolor-baseline.mp4?v=196ce096676d",
+      "oursWeb": "assets/videos/web/world/01_watercolor-ours.mp4?v=f1f541e62322"
     },
     {
       "id": "05_sand_filling",
@@ -124,7 +136,9 @@ window.HF_MEDIA = {
       "ours": "assets/videos/world/05_sand_filling-ours.mp4?v=5c13686d5817",
       "baselinePoster": "assets/posters/world/05_sand_filling-baseline.jpg",
       "poster": "assets/posters/world/05_sand_filling-ours.jpg",
-      "duration": 15.5625
+      "duration": 15.5625,
+      "baselineWeb": "assets/videos/web/world/05_sand_filling-baseline.mp4?v=64ceca429caf",
+      "oursWeb": "assets/videos/web/world/05_sand_filling-ours.mp4?v=8c9484c262a2"
     }
   ],
   "heroWorld": {

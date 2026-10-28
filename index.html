@@ -14,8 +14,8 @@
   <title>History Forcing | Long-Horizon Video World Models</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
-  <script src="media-data.js?v=a6b4359e7118" defer></script>
-  <script src="app.js?v=c49d40b47435" defer></script>
+  <script src="media-data.js?v=e5d3a45aa336" defer></script>
+  <script src="app.js?v=7d7ac8d5ea48" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -58,7 +58,6 @@
         <div class="scene-picker" id="short-picker" aria-label="Choose a 15-second comparison"></div>
         <div class="paired-videos"><div class="paired-video"><div class="video-label">Baseline</div><video id="baseline-video" muted playsinline preload="none" aria-label="Baseline generation"></video><button class="fullscreen-button" type="button" data-fullscreen="baseline-video" aria-label="Fullscreen baseline video">⛶</button></div><div class="paired-video"><div class="video-label ours-label"><span class="status-dot"></span> History Forcing <span>Ours</span></div><video id="ours-video" muted playsinline preload="none" aria-label="History Forcing generation"></video><button class="fullscreen-button" type="button" data-fullscreen="ours-video" aria-label="Fullscreen History Forcing video">⛶</button></div></div>
         <div class="comparison-controls"><button class="button primary compact" id="pair-play" type="button">Play both</button><button class="icon-button" id="pair-reset" type="button" aria-label="Restart both videos">↺</button><input id="pair-seek" type="range" min="0" max="15.5625" step="0.05" value="0" aria-label="Seek both comparison videos"><span class="time-display" id="pair-time">0:00 / 0:16</span><label class="speed-control"><span class="sr-only">Comparison playback speed</span><select id="pair-speed"><option value="1">1×</option><option value="2">2×</option><option value="0.5">0.5×</option></select></label></div>
-        <p class="section-note">Both videos load before playback for a smooth comparison. The first play may take a moment.</p>
         <details class="prompt-details"><summary>View generation prompt</summary><p id="short-prompt"></p></details>
         <p class="media-error" id="pair-error" role="status" hidden></p>
       </div>
@@ -70,8 +69,7 @@
       <div class="paired-videos world-comparison"><div class="paired-video"><div class="video-label">Baseline</div><video id="world-baseline-video" muted playsinline preload="none" aria-label="World-model baseline generation"></video><button class="fullscreen-button" type="button" data-fullscreen="world-baseline-video" aria-label="Fullscreen world-model baseline video">⛶</button></div><div class="paired-video"><div class="video-label ours-label"><span class="status-dot"></span> History Forcing <span>Ours</span></div><video id="world-ours-video" muted playsinline preload="none" aria-label="History Forcing world-model generation"></video><button class="fullscreen-button" type="button" data-fullscreen="world-ours-video" aria-label="Fullscreen History Forcing world-model video">⛶</button></div></div>
       <div class="comparison-controls"><button class="button primary compact" id="world-pair-play" type="button">Play both</button><button class="icon-button" id="world-pair-reset" type="button" aria-label="Restart both world-model videos">↺</button><input id="world-pair-seek" type="range" min="0" max="15.5625" step="0.05" value="0" aria-label="Seek both world-model videos"><span class="time-display" id="world-pair-time">0:00 / 0:16</span><label class="speed-control"><span class="sr-only">World-model comparison playback speed</span><select id="world-pair-speed"><option value="1">1×</option><option value="2">2×</option><option value="0.5">0.5×</option></select></label></div>
       <div class="world-caption"><div><h3 id="world-scene-title">Out-of-sight comparison</h3><p id="world-cue"></p></div><button class="button compact" id="world-revisit" type="button">Jump to revisit ↗</button></div>
-      <p class="section-note">Both videos load before playback for a smooth comparison. The first play may take a moment.</p>
-        <details class="prompt-details"><summary>View scene prompt</summary><p id="world-prompt"></p></details>
+      <details class="prompt-details"><summary>View scene prompt</summary><p id="world-prompt"></p></details>
       <p class="media-error" id="world-pair-error" role="status" hidden></p>
       <p class="section-note">Camera-controlled comparisons use DreamX-World-5B. Left: baseline. Right: History Forcing with historical supervision (λ = 3).</p>
     </section>

@@ -6,6 +6,7 @@ Run from any directory with Python 3, ffmpeg, and ffprobe on PATH:
     python scripts/prepare_media.py --source-root /path/to/paper-workspace
     python scripts/prepare_media.py --prune
     python scripts/prepare_media.py --previews-only
+    python scripts/prepare_media.py --web-only
 
 Only assets/videos, assets/posters, assets/media-sources.json, and media-data.js
 inside this project are written. Original source media is never changed.
@@ -17,7 +18,9 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 from pathlib import Path
+import re
 import shutil
 import struct
 import subprocess
@@ -147,16 +150,109 @@ def prepare_previews(data: dict) -> list[dict]:
     return previews
 
 
+def prepare_comparison_web(data: dict) -> list[dict]:
+    """Create smaller lossy comparison copies; original URLs/files stay intact."""
+    records = []
+    for group, directory in (("short", "15s"), ("world", "world")):
+        for item in data[group]:
+            paired = []
+            for role in ("baseline", "ours"):
+                relative_source = item[role].split("?", 1)[0]
+                source = SITE / relative_source
+                source_probe = probe_video(source)
+                original = source_probe["streams"][0]
+                # Integer scaling preserves the exact display aspect ratio and
+                # even chroma dimensions. 832x480 stays native; 1280x704 -> 960x528.
+                divisor = math.gcd(original["width"], original["height"])
+                ratio_width = original["width"] // divisor
+                ratio_height = original["height"] // divisor
+                factor = min(divisor, 960 // ratio_width)
+                while (ratio_width * factor) % 2 or (ratio_height * factor) % 2:
+                    factor -= 1
+                width, height = ratio_width * factor, ratio_height * factor
+                target = SITE / "assets" / "videos" / "web" / directory / f"{item['id']}-{role}.mp4"
+                target.parent.mkdir(parents=True, exist_ok=True)
+                subprocess.run([
+                    "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(source), "-an",
+                    "-vf", f"scale={width}:{height}:flags=lanczos,setsar=1", "-r", "16",
+                    "-c:v", "libx264", "-preset", "slow", "-crf", "21",
+                    "-maxrate", "1100k", "-bufsize", "2200k",
+                    "-pix_fmt", "yuv420p", "-profile:v", "high", "-level:v", "3.1",
+                    "-g", "16", "-keyint_min", "16", "-sc_threshold", "0",
+                    "-video_track_timescale", "16000", "-movie_timescale", "16000",
+                    "-movflags", "+faststart", str(target),
+                ], check=True)
+                output_probe = probe_video(target)
+                stream = output_probe["streams"][0]
+                if any(stream[key] != original[key] for key in ("avg_frame_rate", "nb_frames")):
+                    raise ValueError(f"Web derivative changed frame rate or frame count: {target.name}")
+                if source_probe["format"]["duration"] != output_probe["format"]["duration"]:
+                    raise ValueError(f"Web derivative changed duration: {target.name}")
+                if not has_faststart(target):
+                    raise ValueError(f"Web derivative is missing faststart: {target.name}")
+                measure = subprocess.run([
+                    "ffmpeg", "-hide_banner", "-i", str(source), "-i", str(target),
+                    "-lavfi", f"[0:v]scale={width}:{height}:flags=lanczos,setsar=1[ref];[1:v][ref]ssim",
+                    "-an", "-f", "null", "-",
+                ], check=True, capture_output=True, text=True, encoding="utf-8")
+                scores = re.findall(r"All:([0-9.]+)", measure.stderr)
+                if not scores:
+                    raise ValueError(f"SSIM measurement unavailable: {target.name}")
+                output_hash = checksum(target)
+                relative = target.relative_to(SITE).as_posix()
+                item[f"{role}Web"] = f"{relative}?v={output_hash[:12]}"
+                duration = float(output_probe["format"]["duration"])
+                record = {
+                    "scene": item["id"], "role": role,
+                    "source": relative_source, "source_sha256": checksum(source),
+                    "file": relative, "sha256": output_hash, "bytes": target.stat().st_size,
+                    "source_width": original["width"], "source_height": original["height"],
+                    "width": width, "height": height, "frame_rate": stream["avg_frame_rate"],
+                    "frames": int(stream["nb_frames"]), "duration": duration,
+                    "average_bit_rate": round(target.stat().st_size * 8 / duration),
+                    "faststart": True, "keyframe_interval_seconds": 1,
+                    "ssim_vs_resized_original": float(scores[-1]),
+                    "encoding": "H.264 high / yuv420p, CRF 21, maxrate 1100k, bufsize 2200k, at most 960px wide, no audio",
+                }
+                records.append(record)
+                paired.append(record)
+            if any(paired[0][key] != paired[1][key] for key in ("width", "height", "frame_rate", "frames", "duration", "encoding")):
+                raise ValueError(f"Web pair has mismatched settings or timing: {item['id']}")
+    return records
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-root", type=Path, default=SITE.parents[1])
     parser.add_argument("--prune", action="store_true", help="Remove stale copied MP4/JPEG assets only inside this project's media folders")
     parser.add_argument("--previews-only", action="store_true", help="Regenerate hero previews from existing site videos without touching full videos")
+    parser.add_argument("--web-only", action="store_true", help="Generate smaller comparison copies without touching original full videos")
     args = parser.parse_args()
     root = args.source_root.resolve()
     for executable in ("ffmpeg", "ffprobe"):
         if shutil.which(executable) is None:
             parser.error(f"{executable} is required on PATH")
+    if args.previews_only and args.web_only:
+        parser.error("Select only one derivative-only mode")
+    if args.web_only:
+        if args.prune:
+            parser.error("--web-only cannot be combined with --prune")
+        text = (SITE / "media-data.js").read_text(encoding="utf-8")
+        data = json.loads(text.split("window.HF_MEDIA = ", 1)[1].strip().removesuffix(";"))
+        web = prepare_comparison_web(data)
+        write_media_data(data)
+        manifest_path = SITE / "assets" / "media-sources.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["schema_version"] = 3
+        manifest["comparison_web"] = web
+        web_note = "Web comparison videos are smaller lossy copies with identical settings for both sides; original-quality files are retained for reproducible generation."
+        ssim_note = "Web SSIM compares against original frames resized with Lanczos to the Web dimensions; it is not a losslessness claim."
+        for note in (web_note, ssim_note):
+            if note not in manifest["notes"]:
+                manifest["notes"].append(note)
+        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"Prepared {len(web)} Web comparison copies: {sum(item['bytes'] for item in web):,} bytes.")
+        return
     if args.previews_only:
         if args.prune:
             parser.error("--previews-only cannot be combined with --prune")
@@ -271,9 +367,10 @@ def main() -> None:
     }
 
     previews = prepare_previews(data)
+    web = prepare_comparison_web(data)
     write_media_data(data)
     (SITE / "assets" / "media-sources.json").write_text(json.dumps({
-        "schema_version": 2,
+        "schema_version": 3,
         "source_root": "paper workspace",
         "video_count": len(records),
         "total_video_bytes": sum(record["bytes"] for record in records),
@@ -281,14 +378,17 @@ def main() -> None:
             "Full videos are losslessly remuxed from selected exports/videos sources with moov before mdat (faststart).",
             "source_sha256 hashes the source MP4; sha256 hashes the served MP4. Container bytes differ while encoded stream hashes match.",
             "Full-video codec, dimensions, frame rate, frame count, and duration are verified unchanged. No full video is re-encoded.",
-            "Hero previews are separate 640px-wide H.264 derivatives with 2-second keyframe intervals; full comparison and long videos retain their original quality.",
+            "Hero previews are separate 640px-wide H.264 derivatives with 2-second keyframe intervals; comparison playback uses the smaller Web copies listed below, while long videos keep their original quality.",
+            "Web comparison videos are smaller lossy copies with identical settings for both sides; original-quality files are retained for reproducible generation.",
+            "Web SSIM compares against original frames resized with Lanczos to the Web dimensions; it is not a losslessness claim.",
             "Posters are JPEG frames extracted at 0.5 seconds, at most 960 pixels wide.",
             "Long-rollout examples last 62.8125 seconds.",
-            "World demos use separate original Baseline and History Forcing videos with identical paired durations.",
+            "World demos display separate Baseline and History Forcing streams with identical paired durations and matched Web encoding settings.",
             "Prompt text is copied from the source exports; some world demos use a changing prompt schedule.",
         ],
         "videos": records,
         "previews": previews,
+        "comparison_web": web,
     }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     if args.prune:
         project_root = SITE.resolve()
@@ -297,6 +397,7 @@ def main() -> None:
             for record in records for key in ("file", "poster")
         }
         expected.update((SITE / preview["file"]).resolve() for preview in previews)
+        expected.update((SITE / record["file"]).resolve() for record in web)
         removed = 0
         for relative_dir, extension in (("assets/videos", ".mp4"), ("assets/posters", ".jpg")):
             media_root = (SITE / relative_dir).resolve()
@@ -315,6 +416,7 @@ def main() -> None:
     print(f"Prepared {len(records)} lossless full videos and {len(records)} posters.")
     print(f"Video bytes: {sum(record['bytes'] for record in records):,}")
     print(f"Hero preview bytes: {sum(preview['bytes'] for preview in previews):,}")
+    print(f"Web comparison bytes: {sum(record['bytes'] for record in web):,}")
     print("Wrote media-data.js and assets/media-sources.json.")
 
 
