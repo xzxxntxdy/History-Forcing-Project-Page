@@ -13,6 +13,10 @@ import re
 class RangeRequestHandler(SimpleHTTPRequestHandler):
     """Add single-byte-range responses to the standard static-file server."""
 
+    # Some Windows MIME registries omit WebP; full-size figure links must open
+    # as images rather than trigger application/octet-stream downloads.
+    extensions_map = {**SimpleHTTPRequestHandler.extensions_map, ".webp": "image/webp"}
+
     _byte_range = None
 
     def handle(self):
